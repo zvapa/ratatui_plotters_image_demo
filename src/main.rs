@@ -1,64 +1,42 @@
-use color_eyre::Result;
-use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind};
-use futures::{FutureExt, StreamExt, select};
+mod instruments;
+mod todo_list;
+
+use color_eyre::{Result, eyre::Ok};
+use crossterm::event::{Event, EventStream, KeyEvent, KeyEventKind};
+use futures::{channel::mpsc::UnboundedSender, select, FutureExt, StreamExt};
 use ratatui::{
     DefaultTerminal, Frame,
-    layout::{Alignment, Constraint, Layout, Rect},
-    style::{Color, Modifier, Style},
-    text::ToSpan,
-    widgets::{Block, BorderType, List, ListItem, ListState, Paragraph, Wrap},
+    layout::{Constraint, Layout, Rect},
 };
-use std::io::Error;
 
-#[derive(Default)]
-enum View {
-    Instruments,
-    #[default]
-    List,
+use crate::{
+    instruments::InstrumentList,
+    todo_list::{FormAction, TodoItem, TodoList},
+};
+
+pub(crate) enum View {
+    Instruments(InstrumentList),
+    List(TodoList),
 }
 
-#[derive(Default, PartialEq)]
-enum ListMode {
-    #[default]
-    Normal,
-    Insert,
+pub(crate) enum Action {
+    Quit,
+    ImageAction,
+    FormAction(FormAction),
 }
 
-enum FormAction {
-    None,
-    Submit(TodoItem),
-    Escape,
-}
-
-#[derive(Default)]
-struct TodoItem {
-    is_done: bool,
-    description: String,
-}
-
-#[derive(Default)]
-pub struct State {
-    current_view: View,
-    todo_list: ToDoList,
-    running: bool, // use to exit the app
-}
-
-#[derive(Default)]
-pub struct ToDoList {
-    items: Vec<TodoItem>,
-    state: ListState,
-    mode: ListMode,
-    input_value: String,
+pub(crate) struct State {
+    pub(crate) current_view: View,
+    pub(crate) running: bool, // use to exit the app
 }
 
 impl State {
-    pub fn init() -> Self {
-        let mut state = State::default();
-        state.running = true;
-        state.todo_list.items.push(TodoItem {
-            is_done: false,
-            description: " add new items here ".to_string(),
-        });
+    pub fn new() -> Self {
+        let state = State {
+            current_view: View::Instruments(InstrumentList::default()),
+            // current_view: View::List(TodoList::default()),
+            running: true,
+        };
         state
     }
 }
@@ -75,13 +53,17 @@ impl State {
 }
  */
 
-async fn run(terminal: &mut DefaultTerminal) -> Result<()> {
-    let mut state = State::init();
-    let mut event_stream = EventStream::new();
+async fn run(terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
+    let mut state = State::new();
+    let mut crossterm_event_stream = EventStream::new();
+    let (mut tx, mut rx) = futures::channel::mpsc::unbounded::<Action>(); // this should be part of State... ?
     loop {
-        let mut fut = event_stream.next().fuse();
+        let mut fe = crossterm_event_stream.next().fuse();
+        let mut fa = rx.next().fuse();
         select! {
-            maybe_event = fut => handle_event(maybe_event, &mut state).await?,
+            maybe_event = fe => on_event(maybe_event, &mut state, &mut tx).await?,
+            maybe_action = fa => on_action(maybe_action, &mut state).await?,
+            // other 'actions' here..
         }
         if !state.running {
             break;
@@ -91,28 +73,41 @@ async fn run(terminal: &mut DefaultTerminal) -> Result<()> {
     Ok(())
 }
 
-async fn handle_event(maybe_event: Option<Result<Event, Error>>, state: &mut State) -> Result<()> {
+async fn on_action(maybe_action: Option<Action>, state: &mut State) -> Result<()> {
+    // if it's 'Quit' -> quit
+    if let Some(Action::Quit) = maybe_action {
+        state.running = false;
+    }
+    match &mut state.current_view {
+        View::Instruments(instrument_list) => {
+            // 'Instruments' view handles the action
+        },
+        View::List(todo_list) => {
+            // 'ToDo list' view handles the action
+
+        },
+    }
+    Ok(())
+}
+
+async fn on_event(
+    maybe_event: Option<Result<Event, std::io::Error>>,
+    state: &mut State,
+    tx: &mut UnboundedSender<Action>
+) -> color_eyre::Result<()> {
     match maybe_event {
-        Some(Ok(ev)) => {
+        Some(std::result::Result::Ok(ev)) => {
+            // only handling key events for now
             if let Event::Key(key_event) = ev {
                 if key_event.kind == KeyEventKind::Press {
-                    match state.current_view {
-                        View::Instruments => {}
-                        View::List if state.todo_list.mode == ListMode::Insert => {
-                            match handle_action_list_add_new(state, key_event) {
-                                FormAction::None => {}
-                                FormAction::Submit(item) => {
-                                    state.todo_list.items.push(item);
-                                    state.todo_list.input_value.clear();
-                                    state.todo_list.mode = ListMode::Normal;
-                                }
-                                FormAction::Escape => {
-                                    state.todo_list.mode = ListMode::Normal;
-                                    state.todo_list.input_value.clear();
-                                }
-                            }
+                    // delegate to the views
+                    match &mut state.current_view {
+                        View::List(td_list) => {
+                            td_list.on_event(key_event).await?;
                         }
-                        View::List => handle_action_home_screen(state, key_event),
+                        View::Instruments(instrument_list) => {
+                            instrument_list.on_event(key_event, tx).await?;
+                        }
                     }
                 }
             }
@@ -125,109 +120,15 @@ async fn handle_event(maybe_event: Option<Result<Event, Error>>, state: &mut Sta
     Ok(())
 }
 
-// another 'mode' ("list add new item")
-fn handle_action_list_add_new(app_state: &mut State, key_event: KeyEvent) -> FormAction {
-    match key_event.code {
-        KeyCode::Char(c) => {
-            app_state.todo_list.input_value.push(c);
-        }
-        KeyCode::Backspace => {
-            app_state.todo_list.input_value.pop();
-        }
-        KeyCode::Esc => return FormAction::Escape,
-        KeyCode::Enter => {
-            return FormAction::Submit(TodoItem {
-                is_done: false,
-                description: app_state.todo_list.input_value.to_string(),
-            });
-        }
-        _ => {}
-    }
-    FormAction::None
-}
-
-// in 'home' screen (mode)
-fn handle_action_home_screen(app_state: &mut State, key_event: KeyEvent) {
-    match key_event.code {
-        KeyCode::Char('q') => {
-            app_state.running = false;
-        }
-        KeyCode::Down => {
-            app_state.todo_list.state.select_next();
-        }
-        KeyCode::Up => {
-            app_state.todo_list.state.select_previous();
-        }
-        KeyCode::Insert => {
-            app_state.todo_list.mode = ListMode::Insert;
-        }
-        KeyCode::Char(' ') => {
-            if let Some(selected_index) = app_state.todo_list.state.selected() {
-                if let Some(td_item) = app_state.todo_list.items.get_mut(selected_index) {
-                    td_item.is_done = !td_item.is_done; // toggle
-                };
-            };
-        }
-        KeyCode::Delete => {
-            if let Some(selected_index) = app_state.todo_list.state.selected() {
-                app_state.todo_list.items.remove(selected_index);
-            };
-        }
-        _ => {}
-    }
-}
-
 /// called via ```terminal.draw(|f| render(f, &mut app_state))?;``` line inside [`fn@crate::run`] loop
 /// to render the entire frame based on the current [`struct@crate::AppState`]
-fn render(f: &mut Frame, app_state: &mut State) {
+fn render(f: &mut Frame, state: &mut State) {
     let [my_area]: [Rect; 1] = Layout::vertical([Constraint::Fill(1)]).areas(f.area());
 
-    // add new list item 'mode'
-    if app_state.todo_list.mode == ListMode::Insert {
-        render_list_add_new(f, app_state, my_area);
-    } else {
-        // 'normal' / 'home' mode
-        render_normal_mode(f, app_state, my_area);
+    match &mut state.current_view {
+        View::Instruments(instrument_list) => instrument_list.render(f, my_area),
+        View::List(todo_list) => todo_list.render(f, my_area),
     }
-}
-
-fn render_normal_mode(f: &mut Frame<'_>, app_state: &mut State, my_area: Rect) {
-    f.render_stateful_widget(
-        List::new(app_state.todo_list.items.iter().map(|i| {
-            match i.is_done {
-                false => ListItem::new(i.description.trim()).style(Color::LightGreen),
-                true => ListItem::new(i.description.trim()).style(
-                    Style::new()
-                        .fg(Color::LightGreen)
-                        .add_modifier(Modifier::CROSSED_OUT),
-                ),
-            }
-        }))
-        .highlight_style(Style::new().add_modifier(Modifier::REVERSED))
-        .block(
-            Block::bordered()
-                .border_type(BorderType::Rounded)
-                .style(Color::LightMagenta)
-                .title(" list ")
-                .title_alignment(Alignment::Center),
-        ),
-        my_area,
-        &mut app_state.todo_list.state,
-    )
-}
-
-fn render_list_add_new(f: &mut Frame<'_>, app_state: &mut State, my_area: Rect) {
-    f.render_widget(
-        Paragraph::new(app_state.todo_list.input_value.to_string())
-            .wrap(Wrap { trim: true })
-            .block(
-                Block::bordered()
-                    .border_type(BorderType::Rounded)
-                    .style(Color::LightYellow)
-                    .title(" edit item ".to_span().into_centered_line()),
-            ),
-        my_area,
-    );
 }
 
 #[tokio::main]
@@ -236,7 +137,6 @@ async fn main() -> Result<()> {
 
     let mut terminal = ratatui::init();
     run(&mut terminal).await?;
-    // App::new().run(&mut terminal).await?;
 
     ratatui::restore();
     Ok(())

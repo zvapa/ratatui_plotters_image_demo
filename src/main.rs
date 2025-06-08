@@ -1,17 +1,19 @@
-mod instruments;
-mod todo_list;
+mod views {
+    pub(crate) mod instruments;
+    pub(crate) mod todo_list;
+}
 
 use color_eyre::{Result, eyre::Ok};
-use crossterm::event::{Event, EventStream, KeyEvent, KeyEventKind};
-use futures::{channel::mpsc::UnboundedSender, select, FutureExt, StreamExt};
+use crossterm::event::{Event, EventStream, KeyEventKind};
+use futures::{FutureExt, StreamExt, channel::mpsc::UnboundedSender, select};
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Constraint, Layout, Rect},
 };
 
 use crate::{
-    instruments::InstrumentList,
-    todo_list::{FormAction, TodoItem, TodoList},
+    views::instruments::InstrumentList,
+    views::todo_list::TodoList,
 };
 
 pub(crate) enum View {
@@ -21,8 +23,8 @@ pub(crate) enum View {
 
 pub(crate) enum Action {
     Quit,
-    ImageAction,
-    FormAction(FormAction),
+    // ImageAction,
+    // FormAction(FormAction),
 }
 
 pub(crate) struct State {
@@ -31,9 +33,9 @@ pub(crate) struct State {
 }
 
 impl State {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let state = State {
-            current_view: View::Instruments(InstrumentList::default()),
+            current_view: View::Instruments(InstrumentList::new()),
             // current_view: View::List(TodoList::default()),
             running: true,
         };
@@ -56,13 +58,13 @@ impl State {
 async fn run(terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
     let mut state = State::new();
     let mut crossterm_event_stream = EventStream::new();
-    let (mut tx, mut rx) = futures::channel::mpsc::unbounded::<Action>(); // this should be part of State... ?
+    let (tx, mut rx) = futures::channel::mpsc::unbounded::<Action>();
     loop {
         let mut fe = crossterm_event_stream.next().fuse();
         let mut fa = rx.next().fuse();
         select! {
-            maybe_event = fe => on_event(maybe_event, &mut state, &mut tx).await?,
-            maybe_action = fa => on_action(maybe_action, &mut state).await?,
+            maybe_event = fe => on_event(maybe_event, &mut state, &mut tx.clone()).await?,
+            maybe_action = fa => on_action(maybe_action, &mut state, &mut tx.clone()).await?,
             // other 'actions' here..
         }
         if !state.running {
@@ -73,19 +75,24 @@ async fn run(terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
     Ok(())
 }
 
-async fn on_action(maybe_action: Option<Action>, state: &mut State) -> Result<()> {
-    // if it's 'Quit' -> quit
+async fn on_action(
+    maybe_action: Option<Action>,
+    state: &mut State,
+    _tx: &mut UnboundedSender<Action>,
+) -> Result<()> {
+    // handle application wide actions
     if let Some(Action::Quit) = maybe_action {
         state.running = false;
+        return Ok(());
     }
+    // delegate specific actions to the views
     match &mut state.current_view {
         View::Instruments(instrument_list) => {
-            // 'Instruments' view handles the action
-        },
-        View::List(todo_list) => {
-            // 'ToDo list' view handles the action
-
-        },
+            instrument_list.on_action(maybe_action).await?;
+        }
+        View::List(td_list) => {
+            td_list.on_action(maybe_action).await?;
+        }
     }
     Ok(())
 }
@@ -93,8 +100,8 @@ async fn on_action(maybe_action: Option<Action>, state: &mut State) -> Result<()
 async fn on_event(
     maybe_event: Option<Result<Event, std::io::Error>>,
     state: &mut State,
-    tx: &mut UnboundedSender<Action>
-) -> color_eyre::Result<()> {
+    tx: &mut UnboundedSender<Action>,
+) -> Result<()> {
     match maybe_event {
         Some(std::result::Result::Ok(ev)) => {
             // only handling key events for now

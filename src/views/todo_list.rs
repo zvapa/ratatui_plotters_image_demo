@@ -10,6 +10,8 @@ use ratatui::{
     },
 };
 
+use crate::Action;
+
 pub struct TodoItem {
     pub is_done: bool,
     pub description: String,
@@ -147,6 +149,10 @@ impl TodoList {
             }
         }
         Ok(())
+    }
+
+    pub(crate) async fn on_action(&mut self, _action: Option<Action>) -> Result<()>{
+        unimplemented!()
     }
 }
 

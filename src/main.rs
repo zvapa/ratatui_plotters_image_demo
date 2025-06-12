@@ -1,42 +1,52 @@
+mod data {
+    pub(crate) mod data;
+}
 mod views {
     pub(crate) mod instruments;
-    pub(crate) mod todo_list;
+    pub(crate) mod notes;
 }
 
+use crate::{views::instruments::InstrumentList, views::notes::Notes};
 use color_eyre::{Result, eyre::Ok};
 use crossterm::event::{Event, EventStream, KeyEventKind};
-use futures::{FutureExt, StreamExt, channel::mpsc::UnboundedSender, select};
+use futures::{
+    FutureExt, StreamExt,
+    channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded},
+    select,
+};
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Constraint, Layout, Rect},
+    style::{Modifier, Style},
 };
 
-use crate::{
-    views::instruments::InstrumentList,
-    views::todo_list::TodoList,
-};
+pub(crate) const HOTKEY_STYLE: ratatui::prelude::Style =
+    Style::new().add_modifier(Modifier::REVERSED);
 
 pub(crate) enum View {
-    Instruments(InstrumentList),
-    List(TodoList),
+    Instruments,
+    Notes,
 }
 
 pub(crate) enum Action {
     Quit,
     // ImageAction,
-    // FormAction(FormAction),
+    ChangeView(View),
 }
 
 pub(crate) struct State {
     pub(crate) current_view: View,
+    pub(crate) instruments: InstrumentList,
+    pub(crate) notes: Notes,
     pub(crate) running: bool, // use to exit the app
 }
 
 impl State {
     pub(crate) fn new() -> Self {
         let state = State {
-            current_view: View::Instruments(InstrumentList::new()),
-            // current_view: View::List(TodoList::default()),
+            instruments: InstrumentList::new(),
+            notes: Notes::new(),
+            current_view: View::Notes,
             running: true,
         };
         state
@@ -55,10 +65,24 @@ impl State {
 }
  */
 
+async fn start_image_loader(img_rx: UnboundedReceiver<Action>, tx: UnboundedSender<Action>) {
+    loop {
+        todo!()
+    }
+}
+
 async fn run(terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
     let mut state = State::new();
     let mut crossterm_event_stream = EventStream::new();
-    let (tx, mut rx) = futures::channel::mpsc::unbounded::<Action>();
+    let (tx, mut rx) = unbounded::<Action>();
+
+    // image loader's own channel to receive load requests
+    let (img_tx, img_rx) = unbounded::<Action>();
+    let img_handle = {
+        let tx = tx.clone();
+        start_image_loader(img_rx, tx)
+    };
+
     loop {
         let mut fe = crossterm_event_stream.next().fuse();
         let mut fa = rx.next().fuse();
@@ -80,18 +104,31 @@ async fn on_action(
     state: &mut State,
     _tx: &mut UnboundedSender<Action>,
 ) -> Result<()> {
-    // handle application wide actions
-    if let Some(Action::Quit) = maybe_action {
-        state.running = false;
-        return Ok(());
+    // handle application wide actions: quit, help, change view
+    match maybe_action {
+        Some(Action::Quit) => {
+            state.running = false;
+            return Ok(());
+        }
+        Some(Action::ChangeView(ref view)) => match view {
+            View::Instruments => {
+                state.current_view = View::Instruments;
+                return Ok(());
+            }
+            View::Notes => {
+                state.current_view = View::Notes;
+                return Ok(());
+            }
+        },
+        _ => (),
     }
     // delegate specific actions to the views
     match &mut state.current_view {
-        View::Instruments(instrument_list) => {
-            instrument_list.on_action(maybe_action).await?;
+        View::Instruments => {
+            state.instruments.on_action(maybe_action).await?;
         }
-        View::List(td_list) => {
-            td_list.on_action(maybe_action).await?;
+        View::Notes => {
+            state.notes.on_action(maybe_action).await?;
         }
     }
     Ok(())
@@ -109,11 +146,11 @@ async fn on_event(
                 if key_event.kind == KeyEventKind::Press {
                     // delegate to the views
                     match &mut state.current_view {
-                        View::List(td_list) => {
-                            td_list.on_event(key_event).await?;
+                        View::Notes => {
+                            state.notes.on_event(key_event, tx).await?;
                         }
-                        View::Instruments(instrument_list) => {
-                            instrument_list.on_event(key_event, tx).await?;
+                        View::Instruments => {
+                            state.instruments.on_event(key_event, tx).await?;
                         }
                     }
                 }
@@ -128,13 +165,13 @@ async fn on_event(
 }
 
 /// called via ```terminal.draw(|f| render(f, &mut app_state))?;``` line inside [`fn@crate::run`] loop
-/// to render the entire frame based on the current [`struct@crate::AppState`]
+/// to render the entire frame based on the current [`struct@crate::State`]
 fn render(f: &mut Frame, state: &mut State) {
     let [my_area]: [Rect; 1] = Layout::vertical([Constraint::Fill(1)]).areas(f.area());
 
     match &mut state.current_view {
-        View::Instruments(instrument_list) => instrument_list.render(f, my_area),
-        View::List(todo_list) => todo_list.render(f, my_area),
+        View::Instruments => state.instruments.render(f, my_area),
+        View::Notes => state.notes.render(f, my_area),
     }
 }
 

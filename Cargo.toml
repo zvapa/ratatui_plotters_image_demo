@@ -10,3 +10,4 @@ plotters = {version = "0.3.7", default-features = false, features = ["svg_backen
 ratatui = "0.29.0"
 tokio = {version = "1.45.1", features = ["full"]}
 futures = "0.3.31"
+strum_macros = "0.27.1"

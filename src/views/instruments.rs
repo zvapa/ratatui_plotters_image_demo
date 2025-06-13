@@ -1,3 +1,5 @@
+use crate::data::data::{AssetClass, Symbol, get_data};
+use crate::{Action, HOTKEY_STYLE, View};
 use color_eyre::{Result, eyre::Ok};
 use crossterm::event::{KeyCode, KeyEvent};
 use futures::{SinkExt, channel::mpsc::UnboundedSender};
@@ -11,8 +13,10 @@ use ratatui::{
         ScrollbarState, StatefulWidget, Table, TableState, Widget,
     },
 };
-use crate::data::data::{AssetClass, Symbol, get_data};
-use crate::{Action, View, HOTKEY_STYLE};
+use ratatui_image::StatefulImage;
+use ratatui_image::picker::Picker;
+use ratatui_image::protocol::StatefulProtocol;
+use strum::IntoEnumIterator;
 
 const ITEM_HEIGHT: usize = 1;
 
@@ -32,126 +36,21 @@ impl Instrument {
 pub struct InstrumentList {
     items: Vec<Instrument>,
     state: TableState,
+    image: StatefulImage<StatefulProtocol>,
     scroll_state: ScrollbarState,
 }
 impl InstrumentList {
     pub(crate) fn new() -> Self {
-        let mut items = Vec::new();
-        items.push(Instrument {
-            asset_class: AssetClass::Forex,
-            symbol: "EURUSD".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Forex,
-            symbol: "GBPUSD".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Stock,
-            symbol: "AAPL".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Stock,
-            symbol: "NVDA".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Forex,
-            symbol: "EURUSD".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Forex,
-            symbol: "GBPUSD".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Stock,
-            symbol: "AAPL".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Stock,
-            symbol: "NVDA".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Forex,
-            symbol: "EURUSD".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Forex,
-            symbol: "GBPUSD".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Stock,
-            symbol: "AAPL".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Stock,
-            symbol: "NVDA".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Forex,
-            symbol: "EURUSD".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Forex,
-            symbol: "GBPUSD".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Stock,
-            symbol: "AAPL".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Stock,
-            symbol: "NVDA".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Forex,
-            symbol: "EURUSD".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Forex,
-            symbol: "GBPUSD".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Stock,
-            symbol: "AAPL".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Stock,
-            symbol: "NVDA".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Forex,
-            symbol: "EURUSD".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Forex,
-            symbol: "GBPUSD".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Stock,
-            symbol: "AAPL".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Stock,
-            symbol: "NVDA".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Forex,
-            symbol: "EURUSD".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Forex,
-            symbol: "GBPUSD".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Stock,
-            symbol: "AAPL".into(),
-        });
-        items.push(Instrument {
-            asset_class: AssetClass::Stock,
-            symbol: "NVDA".into(),
-        });
+        let items = Symbol::iter()
+            .map(|v| Instrument {
+                symbol: v.to_string(),
+                asset_class: v.asset_class(),
+            })
+            .collect::<Vec<_>>();
         Self {
             state: TableState::default().with_selected(0),
             scroll_state: ScrollbarState::new((items.len() - 1) * ITEM_HEIGHT),
+            image: StatefulImage::default(),
             items,
         }
     }
@@ -246,12 +145,25 @@ impl InstrumentList {
         // plotters: integrate from c:/dev/rust/plotters_example
         // ratatui_image: c:/dev/rust/test_ratatui_image
 
-        let bm: &mut ratatui::prelude::Buffer = f.buffer_mut();
+        // render whatever is currently selected
+        // plotter needs a user provided u8 array/Vec (RGB pixel format)
 
-        let w = image_area.as_size().width;
-        let h = image_area.as_size().height;
+        /*
+        ratatui-image crate:
+        StatefulProtocol = Picker::from.. .new_resize_protocol(
+             DynamicImage:
+                - from ImageReader::new(buffered_reader...consider wrapping the reader with a BufReader::new())
+                - from ImageBuffer
+                - DynamicImage::new - Creates a dynamic image backed by a buffer depending on the color type given.
+        )
+        */
+
+        // let mut picker = Picker::from_query_stdio()?;
+        // let (cell_width_px, cell_height_px) = picker.font_size();
+        // let bm: &mut ratatui::prelude::Buffer = f.buffer_mut();
+
         f.render_widget(
-            Paragraph::new(format!("{w}x{h}"))
+            Paragraph::new("image")
                 .green()
                 .block(Block::new().padding(Padding::uniform(1))),
             image_area,
@@ -265,22 +177,35 @@ impl InstrumentList {
     ) -> Result<()> {
         match key_event.code {
             KeyCode::Char('q') => tx.send(Action::Quit).await?,
-            KeyCode::Char('j') | KeyCode::Down => self.next_row().await?,
-            KeyCode::Char('k') | KeyCode::Up => self.previous_row().await?,
+            KeyCode::Char('j') | KeyCode::Down => {
+                self.next_row().await?;
+                tx.send(Action::RequestImage).await?;
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.previous_row().await?;
+                tx.send(Action::RequestImage).await?;
+            }
             KeyCode::Char('N') => tx.send(Action::ChangeView(View::Notes)).await?,
             _ => {}
         };
         Ok(())
     }
 
-    pub(crate) async fn on_action(&self, _action: Option<Action>) -> Result<()> {
-        unimplemented!()
+    pub(crate) async fn on_action(&self, action: Option<Action>) -> Result<()> {
+        if let Some(action) = action {
+            match action {
+                Action::RequestImage => todo!(),
+                _ => (), // 'Quit' and 'ChangeView' are handled in main run loop
+            }
+        }
+        Ok(())
     }
 
     pub async fn next_row(&mut self) -> Result<()> {
         let i = match self.state.selected() {
             Some(i) => {
                 if i >= self.items.len() - 1 {
+                    // cycle through the list
                     0
                 } else {
                     i + 1
@@ -290,9 +215,6 @@ impl InstrumentList {
         };
         self.state.select(Some(i));
         self.scroll_state = self.scroll_state.position(i * ITEM_HEIGHT);
-
-        // send action to load the image for the selected instrument
-
         Ok(())
     }
 
@@ -311,4 +233,12 @@ impl InstrumentList {
         self.scroll_state = self.scroll_state.position(i * ITEM_HEIGHT);
         Ok(())
     }
+}
+
+/// (width, height) in pixels
+fn cell_rect_to_pixel_size(rect: Rect, font_size: (u32, u32)) -> (u32, u32) {
+    (
+        rect.width as u32 * font_size.0,
+        rect.height as u32 * font_size.1,
+    )
 }

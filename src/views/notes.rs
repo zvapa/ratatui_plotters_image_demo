@@ -197,7 +197,7 @@ impl Notes {
     }
 
     pub(crate) async fn on_action(&mut self, _action: Option<Action>) -> Result<()> {
-        unimplemented!()
+        unimplemented!() // this screen supports no actions yet
     }
 }
 

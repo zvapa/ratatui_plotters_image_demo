@@ -1,4 +1,4 @@
-use strum_macros::{AsRefStr, Display};
+use strum_macros::{AsRefStr, Display, EnumIter};
 
 #[derive(Display, AsRefStr, PartialEq)]
 pub(crate) enum AssetClass {
@@ -7,7 +7,7 @@ pub(crate) enum AssetClass {
     Crypto,
 }
 
-#[derive(Display, AsRefStr, PartialEq)]
+#[derive(Display, AsRefStr, PartialEq, EnumIter)]
 pub(crate) enum Symbol {
     AAPL,
     AMD,
@@ -31,7 +31,7 @@ pub(crate) enum Symbol {
     WULF,
 }
 impl Symbol {
-    pub(crate)  fn asset_class(&self) -> AssetClass {
+    pub(crate) fn asset_class(&self) -> AssetClass {
         match self {
             Symbol::AAPL => AssetClass::Stock,
             Symbol::AMD => AssetClass::Stock,

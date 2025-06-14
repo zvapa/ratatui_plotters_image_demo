@@ -1,7 +1,7 @@
 [package]
+edition = "2024"
 name = "ratatui_plotters_image_demo"
 version = "0.1.0"
-edition = "2024"
 
 [dependencies]
 color-eyre = "0.6.5"
@@ -9,7 +9,10 @@ crossterm = {version = "0.29.0", features = ["event-stream"]}
 plotters = {version = "0.3.7", default-features = false, features = ["svg_backend", "plotters-svg", "datetime", "candlestick", "line_series", "point_series", "full_palette"]}
 ratatui = "0.29.0"
 tokio = {version = "1.45.1", features = ["full"]}
-futures = "0.3.31"
-strum_macros = "0.27.1"
-strum = "0.27.1"
+# futures = "0.3.31"
+futures-util = "0.3.31"
+image = "0.25.6"
 ratatui-image = "8.0.1"
+strum = "0.27.1"
+strum_macros = "0.27.1"
+tokio-stream = "0.1.17"

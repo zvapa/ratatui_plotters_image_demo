@@ -1,4 +1,4 @@
-use strum_macros::{AsRefStr, Display, EnumIter};
+use strum_macros::{AsRefStr, Display, EnumIter, EnumString};
 
 #[derive(Display, AsRefStr, PartialEq)]
 pub(crate) enum AssetClass {
@@ -7,7 +7,7 @@ pub(crate) enum AssetClass {
     Crypto,
 }
 
-#[derive(Display, AsRefStr, PartialEq, EnumIter)]
+#[derive(Display, AsRefStr, PartialEq, EnumIter, EnumString)]
 pub(crate) enum Symbol {
     AAPL,
     AMD,

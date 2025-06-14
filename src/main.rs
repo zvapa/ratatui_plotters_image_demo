@@ -9,17 +9,15 @@ mod views {
 use crate::{views::instruments::InstrumentList, views::notes::Notes};
 use color_eyre::{Result, eyre::Ok};
 use crossterm::event::{Event, EventStream, KeyEventKind};
-use futures::{
-    FutureExt, SinkExt, StreamExt,
-    channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded},
-    pin_mut, select,
-};
+use futures_util::FutureExt;
+use tokio::{self, pin, sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender}};
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Constraint, Layout, Rect},
     style::{Modifier, Style},
 };
 use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
+use tokio_stream::StreamExt;
 
 pub(crate) const HOTKEY_STYLE: ratatui::prelude::Style =
     Style::new().add_modifier(Modifier::REVERSED);
@@ -44,9 +42,9 @@ pub(crate) struct State {
 }
 
 impl State {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(tx: UnboundedSender<Action>) -> Self {
         let state = State {
-            instruments: InstrumentList::new(),
+            instruments: InstrumentList::new(tx),
             notes: Notes::new(),
             current_view: View::Notes,
             running: true,
@@ -55,44 +53,25 @@ impl State {
     }
 }
 
-async fn start_image_loader(
-    img_rx: &mut UnboundedReceiver<Action>,
-    tx: &mut UnboundedSender<Action>,
-) -> Result<()> {
-    // loop {
-    //     // continually reacts for RequestImage messages only
-    //     if let Some(Action::RequestImage) = img_rx.try_next()? {
-    //         let im = StatefulImage::default();
-    //         tx.send(Action::ImageLoaded(im)).await?
-    //     }
-    // }
-    Ok(())
-}
-
 async fn run(terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
-    let mut state = State::new();
+    let (tx, mut rx) = unbounded_channel::<Action>();
+    let mut state = State::new(tx.clone());
     let mut crossterm_event_stream = EventStream::new();
-    let (tx, mut rx) = unbounded::<Action>();
-    // image loader's own channel to receive RequestImage
-    let (_, mut img_rx) = unbounded::<Action>();
-
-    let mut tx_clone = tx.clone();
-    let fut_img_action = start_image_loader(&mut img_rx, &mut tx_clone);
-    pin_mut!(fut_img_action);
-    let mut fut_img_action_fused = fut_img_action.fuse();
 
     loop {
-        let mut fut_event = crossterm_event_stream.next().fuse();
-        let mut fut_action = rx.next().fuse();
-        select! {
-            maybe_event = fut_event => on_event(maybe_event, &mut state, &mut tx.clone()).await?,
-            maybe_action = fut_action => on_action(maybe_action, &mut state, &mut tx.clone()).await?,
-            _ = fut_img_action_fused => { },
+        let fe = crossterm_event_stream.next().fuse();
+        let fa = rx.recv().fuse();
+
+        tokio::select! {
+            maybe_event = fe => on_event(maybe_event, &mut state, &tx).await?,
+            maybe_action = fa => on_action(maybe_action, &mut state, &tx).await?,
         }
+
+        terminal.draw(|f| render(f, &mut state))?;
         if !state.running {
+
             break;
         }
-        terminal.draw(|f| render(f, &mut state))?;
     }
     Ok(())
 }
@@ -100,7 +79,7 @@ async fn run(terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
 async fn on_event(
     maybe_event: Option<Result<Event, std::io::Error>>,
     state: &mut State,
-    tx: &mut UnboundedSender<Action>,
+    tx: &UnboundedSender<Action>,
 ) -> Result<()> {
     match maybe_event {
         Some(std::result::Result::Ok(ev)) => {
@@ -130,7 +109,7 @@ async fn on_event(
 async fn on_action(
     maybe_action: Option<Action>,
     state: &mut State,
-    tx: &mut UnboundedSender<Action>,
+    tx: &UnboundedSender<Action>,
 ) -> Result<()> {
     // handle application wide actions: quit, help, change view
     match maybe_action {

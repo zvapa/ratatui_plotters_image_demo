@@ -1,6 +1,5 @@
 use color_eyre::{Result, eyre::Ok};
 use crossterm::event::{KeyCode, KeyEvent};
-use futures::{SinkExt, channel::mpsc::UnboundedSender};
 use ratatui::{
     Frame,
     layout::Rect,
@@ -8,6 +7,7 @@ use ratatui::{
     text::{Line, Span, ToSpan},
     widgets::{Block, BorderType, List, ListItem, ListState, Paragraph, Wrap},
 };
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{Action, HOTKEY_STYLE};
 
@@ -129,7 +129,7 @@ impl Notes {
     pub(crate) async fn on_event(
         &mut self,
         key_event: KeyEvent,
-        tx: &mut UnboundedSender<Action>,
+        tx: &UnboundedSender<Action>,
     ) -> Result<()> {
         match self.mode {
             NotesMode::DisplayList => match key_event.code {
@@ -152,10 +152,9 @@ impl Notes {
                     };
                 }
                 KeyCode::Char('I') => {
-                    tx.send(Action::ChangeView(crate::View::Instruments))
-                        .await?
+                    tx.send(Action::ChangeView(crate::View::Instruments))?
                 }
-                KeyCode::Char('q') => tx.send(Action::Quit).await?,
+                KeyCode::Char('q') => tx.send(Action::Quit)?,
                 _ => {}
             },
             NotesMode::AddNew => match key_event.code {

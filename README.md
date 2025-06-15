@@ -1,3 +1,5 @@
+<img src="ratatui_plotters_image_demo.gif" height=400>
+
 Demo of a [Ratatui](https://github.com/ratatui/ratatui) app displaying on-the-fly charts made with [plotters](https://github.com/plotters-rs/plotters), via [ratatui-image](https://github.com/benjajaja/ratatui-image) widget.
 
 I'm using hardcoded data so I can focus on the performance of chart generation and encoding.

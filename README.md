@@ -1,8 +1,8 @@
 <img src="ratatui_plotters_image_demo.gif" height=400>
 
-Demo of a [Ratatui](https://github.com/ratatui/ratatui) app displaying on-the-fly charts made with [plotters](https://github.com/plotters-rs/plotters), via [ratatui-image](https://github.com/benjajaja/ratatui-image) widget.
+Demo of a [Ratatui](https://github.com/ratatui/ratatui) app displaying on-the-fly charts made with [plotters](https://github.com/plotters-rs/plotters) and [ratatui-image](https://github.com/benjajaja/ratatui-image) widget.
 
-I'm using hardcoded, fictitious data, so I can focus on the performance of chart generation and encoding.
+I'm using hardcoded, fictitious data, because I wanted to focus on the performance of chart generation and encoding. The "Notes" view(mode) is included to suggest how a more complex app might look like.
 
 Part of my rust journey exploring async, channels, futures, tokio and ratatui.
 

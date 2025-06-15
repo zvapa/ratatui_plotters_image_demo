@@ -15,11 +15,6 @@ use crate::{Action, HOTKEY_STYLE};
 pub(crate) struct Note {
     pub(crate) content: String,
 }
-impl Note {
-    pub(crate) fn title(&self) -> String {
-        self.content.chars().take(20).collect::<String>() + "..."
-    }
-}
 
 pub(crate) struct Notes {
     pub items: Vec<Note>,
@@ -32,7 +27,7 @@ impl Notes {
     pub(crate) fn new() -> Self {
         Notes {
             items: demo_notes(),
-            state: ListState::default(),
+            state: ListState::default().with_selected(Some(0)),
             mode: NotesMode::DisplayList,
             input_value: String::default(),
         }
@@ -42,8 +37,7 @@ impl Notes {
         match self.mode {
             NotesMode::DisplayList => f.render_stateful_widget(
                 List::new(self.items.iter().map(|i| {
-                    let title = i.title().to_owned();
-                    ListItem::new(title).style(Color::LightMagenta)
+                    ListItem::new(i.content.to_string()).style(Color::LightMagenta)
                 }))
                 .highlight_style(Style::new().add_modifier(Modifier::REVERSED))
                 .block(

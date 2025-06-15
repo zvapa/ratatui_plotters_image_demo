@@ -10,5 +10,5 @@ Todo:
 - [ ] improve image load time by either shrinking the image (with something like quantette), or using separate task for chart generation
 
 
-### Disclaimer:
-This project is for education purpose and does not represent financial advice in any way. Nor should it be used in trading applications.
+#### Disclaimer:
+This project is for education purpose and does not represent financial advice in any way.

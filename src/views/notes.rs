@@ -30,12 +30,8 @@ pub(crate) struct Notes {
 
 impl Notes {
     pub(crate) fn new() -> Self {
-        let mut items = Vec::new();
-        items.push(Note {
-            content: "add new or edit note...".to_string(),
-        });
         Notes {
-            items,
+            items: demo_notes(),
             state: ListState::default(),
             mode: NotesMode::DisplayList,
             input_value: String::default(),
@@ -151,9 +147,7 @@ impl Notes {
                         self.items.remove(selected_index);
                     };
                 }
-                KeyCode::Char('I') => {
-                    tx.send(Action::ChangeView(crate::View::Instruments))?
-                }
+                KeyCode::Char('I') => tx.send(Action::ChangeView(crate::View::Instruments))?,
                 KeyCode::Char('q') => tx.send(Action::Quit)?,
                 _ => {}
             },
@@ -198,6 +192,19 @@ impl Notes {
     pub(crate) async fn on_action(&mut self, _action: Option<Action>) -> Result<()> {
         unimplemented!() // this screen supports no actions yet
     }
+}
+
+fn demo_notes() -> Vec<Note> {
+    [
+        "monitor price action for selected symbols",
+        "todo: mark pivot points on charts",
+        "todo: choose trend indicator",
+    ]
+    .iter()
+    .map(|s| Note {
+        content: s.to_string(),
+    })
+    .collect::<Vec<_>>()
 }
 
 #[derive(PartialEq)]

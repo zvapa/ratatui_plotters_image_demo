@@ -47,7 +47,7 @@ impl State {
         let state = State {
             instruments: InstrumentList::new(tx, picker),
             notes: Notes::new(),
-            current_view: View::Notes,
+            current_view: View::Instruments,
             running: true,
         };
         state

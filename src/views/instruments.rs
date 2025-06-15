@@ -66,7 +66,7 @@ impl InstrumentList {
         let outer_block = Block::bordered()
             .border_type(BorderType::Rounded)
             .border_style(Style::new().fg(Color::LightYellow))
-            .title(Line::from(" Instruments ").left_aligned())
+            .title(Line::from(" Instruments (price action snapshots)").left_aligned())
             .title(
                 Line::from(vec![
                     Span::styled("N", HOTKEY_STYLE),
@@ -278,7 +278,7 @@ impl InstrumentList {
                         x.4,
                         plotters::style::Color::filled(&WHITE),
                         WHITE,
-                        5,
+                        7,
                     )
                 }))?;
 

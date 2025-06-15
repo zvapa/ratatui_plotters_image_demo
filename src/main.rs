@@ -10,13 +10,15 @@ use crate::{views::instruments::InstrumentList, views::notes::Notes};
 use color_eyre::{Result, eyre::Ok};
 use crossterm::event::{Event, EventStream, KeyEventKind};
 use futures_util::FutureExt;
-use tokio::{self, pin, sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender}};
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Constraint, Layout, Rect},
     style::{Modifier, Style},
 };
-use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
+use ratatui_image::picker::Picker;
+use tokio::{
+    self, sync::mpsc::{UnboundedSender, unbounded_channel},
+};
 use tokio_stream::StreamExt;
 
 pub(crate) const HOTKEY_STYLE: ratatui::prelude::Style =
@@ -29,8 +31,7 @@ pub(crate) enum View {
 
 pub(crate) enum Action {
     Quit,
-    RequestImage,
-    ImageLoaded(StatefulImage<StatefulProtocol>),
+    RequestImageData,
     ChangeView(View),
 }
 
@@ -42,9 +43,9 @@ pub(crate) struct State {
 }
 
 impl State {
-    pub(crate) fn new(tx: UnboundedSender<Action>) -> Self {
+    pub(crate) fn new(tx: UnboundedSender<Action>, picker: Picker) -> Self {
         let state = State {
-            instruments: InstrumentList::new(tx),
+            instruments: InstrumentList::new(tx, picker),
             notes: Notes::new(),
             current_view: View::Notes,
             running: true,
@@ -53,12 +54,14 @@ impl State {
     }
 }
 
-async fn run(terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
+async fn run(terminal: &mut DefaultTerminal, picker: Picker) -> color_eyre::Result<()> {
     let (tx, mut rx) = unbounded_channel::<Action>();
-    let mut state = State::new(tx.clone());
+    let mut state = State::new(tx.clone(), picker);
     let mut crossterm_event_stream = EventStream::new();
 
     loop {
+        terminal.draw(|f| render(f, &mut state))?;
+
         let fe = crossterm_event_stream.next().fuse();
         let fa = rx.recv().fuse();
 
@@ -67,9 +70,7 @@ async fn run(terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
             maybe_action = fa => on_action(maybe_action, &mut state, &tx).await?,
         }
 
-        terminal.draw(|f| render(f, &mut state))?;
         if !state.running {
-
             break;
         }
     }
@@ -109,36 +110,39 @@ async fn on_event(
 async fn on_action(
     maybe_action: Option<Action>,
     state: &mut State,
-    tx: &UnboundedSender<Action>,
+    _tx: &UnboundedSender<Action>,
 ) -> Result<()> {
     // handle application wide actions: quit, help, change view
     match maybe_action {
         Some(Action::Quit) => {
-                        state.running = false;
-                        return Ok(());
-            }
+            state.running = false;
+            return Ok(());
+        }
         Some(Action::ChangeView(ref view)) => match view {
+            View::Instruments => {
+                state.current_view = View::Instruments;
+                return Ok(());
+            }
+            View::Notes => {
+                state.current_view = View::Notes;
+                return Ok(());
+            }
+        },
+        Some(specific_screen_action) => {
+            // delegate specific actions to the views
+            match &mut state.current_view {
                 View::Instruments => {
-                    state.current_view = View::Instruments;
-                    return Ok(());
+                    state
+                        .instruments
+                        .on_action(Some(specific_screen_action))
+                        .await?;
                 }
                 View::Notes => {
-                    state.current_view = View::Notes;
-                    return Ok(());
-                }
-            },
-        Some(specific_screen_action) => {
-                // delegate specific actions to the views
-                match &mut state.current_view {
-                    View::Instruments => {
-                        state.instruments.on_action(Some(specific_screen_action)).await?;
-                    }
-                    View::Notes => {
-                        state.notes.on_action(Some(specific_screen_action)).await?;
-                    }
+                    state.notes.on_action(Some(specific_screen_action)).await?;
                 }
             }
-        None => {},
+        }
+        None => {}
     }
     Ok(())
 }
@@ -157,7 +161,8 @@ fn render(f: &mut Frame, state: &mut State) {
 async fn main() -> Result<()> {
     color_eyre::install()?;
     let mut terminal = ratatui::init();
-    run(&mut terminal).await?;
+    let picker = Picker::from_query_stdio()?;
+    run(&mut terminal, picker).await?;
     ratatui::restore();
     Ok(())
 }

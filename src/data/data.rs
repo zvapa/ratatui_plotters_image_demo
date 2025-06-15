@@ -57,7 +57,7 @@ impl Symbol {
     }
 }
 
-pub(crate) async fn get_data(symbol: Symbol) -> Vec<(u32, f32, f32, f32, f32)> {
+pub(crate) fn get_data(symbol: Symbol) -> Vec<(u32, f32, f32, f32, f32)> {
     // time,open,high,low,close
     match symbol {
         Symbol::AAPL => vec![
